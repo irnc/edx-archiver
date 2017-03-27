@@ -16,22 +16,51 @@ j.setCookie(
   'https://university.mongodb.com/'
 );
 
-request({ url: COURSE_URL, jar: j, json: true }, (err, response, body) => {
-  if (response.statusCode === 401) {
-    console.log(`Please provide up-to-date sessionid using SESSION_ID environment variable`);
-    console.log(body);
-    return;
-  }
-
-  console.log(require('util').inspect(body, { colors: true }));
-  const resourcePath = getPath(body.href);
-
-  mkdirp(resourcePath, (err) => {
-    if (err) {
-      console.log(`Failed to create ${dir}`);
+function getPage(url, callback) {
+  request({ url, jar: j, json: true }, (err, response, body) => {
+    if (response.statusCode === 401) {
+      console.log(`Please provide up-to-date sessionid using SESSION_ID environment variable`);
+      console.log(body);
       return;
     }
 
-    fs.writeFileSync(`${resourcePath}.json`, JSON.stringify(body, null, 2));
+    const resourcePath = getPath(body.href);
+
+    mkdirp(resourcePath, (err) => {
+      if (err) {
+        console.log(`Failed to create ${dir}`);
+        return;
+      }
+
+      fs.writeFileSync(`${resourcePath}.json`, JSON.stringify(body, null, 2));
+      callback(null, body);
+    })
+  });
+}
+
+function run(fn, q) {
+  if (q.length === 0) {
+    console.log('end of queue');
+    return;
+  }
+
+  console.log(`running fn for ${q[0]}`);
+  fn(q[0], (err, data) => {
+    if (err) {
+      console.log(err);
+      return;
+    }
+
+    console.log(require('util').inspect(data, { colors: true }));
+
+    let remainingQueue = q.slice(1);
+
+    if (data.children) {
+      remainingQueue = remainingQueue.concat(data.children.map(c => c.href));
+    }
+
+    run(fn, remainingQueue);
   })
-});
+}
+
+run(getPage, [ COURSE_URL ]);
